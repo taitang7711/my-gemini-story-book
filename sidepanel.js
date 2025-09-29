@@ -76,6 +76,15 @@ class StorybookTTSSidePanel {
             this.saveData('styleInstruction', document.getElementById('styleInstruction').value);
         });
         
+        // Auto-save retry settings
+        document.getElementById('retryCount').addEventListener('input', () => {
+            this.saveData('retryCount', document.getElementById('retryCount').value);
+        });
+        
+        document.getElementById('retryDelay').addEventListener('input', () => {
+            this.saveData('retryDelay', document.getElementById('retryDelay').value);
+        });
+        
         // Logs section buttons - Add event listeners to override onclick handlers
         try {
             // Override refresh logs button
@@ -291,6 +300,72 @@ class StorybookTTSSidePanel {
         // Display raw JSON
         document.getElementById('rawStorybookData').value = JSON.stringify(data, null, 2);
     }
+    
+    displayAudioResults(audioData) {
+        if (!audioData || audioData.length === 0) {
+            console.warn('No audio data to display');
+            return;
+        }
+
+        // Show the audio results section
+        document.getElementById('audioResults').classList.remove('hidden');
+        
+        // Fill audio table
+        const tbody = document.getElementById('audioTableBody');
+        tbody.innerHTML = '';
+        
+        let successCount = 0;
+        
+        audioData.forEach((audioItem, index) => {
+            const row = document.createElement('tr');
+            const isSuccess = audioItem.audioSrc && audioItem.audioSrc !== '';
+            const statusClass = isSuccess ? 'status-success' : 'status-error';
+            const statusIcon = isSuccess ? '✓' : '✗';
+            const statusText = isSuccess ? 'Hoàn thành' : 'Lỗi';
+            const retryInfo = audioItem.retryCount > 0 ? ` (${audioItem.retryCount} retry)` : '';
+            
+            if (isSuccess) successCount++;
+            
+            row.innerHTML = `
+                <td><strong>Trang ${audioItem.pageNumber || index + 1}</strong></td>
+                <td><span class="${statusClass}">${statusIcon} ${statusText}${retryInfo}</span></td>
+                <td>${isSuccess ? 
+                    `<audio controls style="width: 120px; height: 30px;">
+                        <source src="${audioItem.audioSrc}" type="audio/wav">
+                        <a href="${audioItem.audioSrc}" target="_blank" class="audio-link">🔊 Nghe</a>
+                    </audio>` : 
+                    '<span style="color: #999;">Không có</span>'
+                }</td>
+                <td style="font-size: 10px;">${audioItem.timestamp ? new Date(audioItem.timestamp).toLocaleString() : new Date().toLocaleString()}</td>
+                <td>
+                    ${isSuccess ? 
+                        `<button class="btn-secondary" onclick="downloadAudio('${audioItem.audioSrc}', 'page-${audioItem.pageNumber}.wav')" title="Tải xuống">⬇️</button>` + 
+                        `<button class="btn-secondary" onclick="playAudioFullscreen('${audioItem.audioSrc}', 'Trang ${audioItem.pageNumber}')" title="Phát toàn màn hình">🔊</button>` : 
+                        `<button class="btn-danger" onclick="retryAudio(${index})" title="Thử lại">🔄</button>`
+                    }
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+        
+        // Update summary
+        const summaryEl = document.getElementById('audioSummary');
+        const successRate = Math.round((successCount / audioData.length) * 100);
+        summaryEl.innerHTML = `
+            <strong>📊 Tổng kết:</strong> ${successCount}/${audioData.length} file hoàn thành (${successRate}%)<br>
+            <strong>⏰ Thời gian tạo:</strong> ${new Date().toLocaleString()}<br>
+            <strong>📁 Tổng dung lượng:</strong> Ước tính ~${(successCount * 0.5).toFixed(1)} MB
+        `;
+        
+        // Set appropriate status color
+        if (successRate === 100) {
+            summaryEl.className = 'status success audio-summary';
+        } else if (successRate >= 50) {
+            summaryEl.className = 'status warning audio-summary';
+        } else {
+            summaryEl.className = 'status error audio-summary';
+        }
+    }
 
     async openAIStudioTab() {
         this.updateStatus(3, '🌐 Đang mở AI Studio...', 'info');
@@ -322,20 +397,35 @@ class StorybookTTSSidePanel {
         }
 
         const styleInstruction = document.getElementById('styleInstruction').value.trim();
+        const retryCount = parseInt(document.getElementById('retryCount').value) || 2;
+        const retryDelay = parseInt(document.getElementById('retryDelay').value) || 5;
+        
         document.getElementById('audioProgress').classList.remove('hidden');
         document.getElementById('pauseAudioBtn').disabled = false;
         
         this.updateStatus(3, '🎵 Đang tạo audio cho từng trang...', 'info');
-        this.logActivity(3, `Starting audio generation for ${this.storybookData.pages.length} pages`, 'info');
+        this.logActivity(3, `Starting audio generation for ${this.storybookData.pages.length} pages (Retry: ${retryCount}x, Delay: ${retryDelay}s)`, 'info');
 
         this.audioGenerationPaused = false;
-        this.currentAudioIndex = 0;
+        
+        // Try to resume from where we left off
+        let startIndex = this.currentAudioIndex || 0;
+        
+        // Check if we already have some audio data to resume from
+        if (this.audioData && this.audioData.length > 0) {
+            startIndex = Math.max(startIndex, this.audioData.length);
+            this.logActivity(3, `Resuming audio generation from page ${startIndex + 1}`, 'info');
+        } else {
+            this.currentAudioIndex = 0;
+            startIndex = 0;
+        }
 
         try {
-            const audioResults = [];
+            // Initialize or continue with existing audio results
+            const audioResults = this.audioData ? [...this.audioData] : [];
             const pages = this.storybookData.pages;
 
-            for (let i = this.currentAudioIndex; i < pages.length; i++) {
+            for (let i = startIndex; i < pages.length; i++) {
                 if (this.audioGenerationPaused) {
                     this.logActivity(3, `Audio generation paused at page ${i + 1}`, 'info');
                     break;
@@ -344,40 +434,128 @@ class StorybookTTSSidePanel {
                 const page = pages[i];
                 this.currentAudioIndex = i;
                 
-                this.updateAudioProgress(`🎙️ Đang xử lý trang ${i + 1}/${pages.length}: ${page.pageNumber}`);
-                this.updateAudioProgressBar((i / pages.length) * 100);
+                let audioSrc = null;
+                let retryAttempt = 0;
+                let lastError = null;
 
-                const response = await this.sendMessage({
-                    action: "executeScript",
-                    data: {
-                        action: "generateTTS",
-                        text: page.text,
-                        styleInstruction: styleInstruction
+                // Retry logic for each page
+                while (retryAttempt <= retryCount && !audioSrc && !this.audioGenerationPaused) {
+                    const attemptText = retryAttempt === 0 ? '' : ` (Thử lại ${retryAttempt}/${retryCount})`;
+                    this.updateAudioProgress(`🎙️ Đang xử lý trang ${i + 1}/${pages.length}: ${page.pageNumber}${attemptText}`);
+                    this.updateAudioProgressBar(((i + (retryAttempt / (retryCount + 1))) / pages.length) * 100);
+
+                    try {
+                        // Add timeout to prevent hanging
+                        const timeoutPromise = new Promise((_, reject) => {
+                            setTimeout(() => reject(new Error('Request timeout after 60 seconds')), 60000);
+                        });
+                        
+                        const requestPromise = this.sendMessage({
+                            action: "executeScript",
+                            data: {
+                                action: "generateTTS",
+                                text: page.text,
+                                styleInstruction: styleInstruction
+                            }
+                        });
+                        
+                        const response = await Promise.race([requestPromise, timeoutPromise]);
+
+                        if (response && response.audioSrc) {
+                            audioSrc = response.audioSrc;
+                            if (retryAttempt > 0) {
+                                this.logActivity(3, `Audio generated for page ${page.pageNumber} after ${retryAttempt} retries`, 'success');
+                            } else {
+                                this.logActivity(3, `Audio generated for page ${page.pageNumber}`, 'success');
+                            }
+                        } else {
+                            lastError = 'Không nhận được audio từ server';
+                            this.logActivity(3, `Attempt ${retryAttempt + 1} failed for page ${page.pageNumber}: No audio received`, 'warning');
+                        }
+                    } catch (error) {
+                        lastError = error.message;
+                        this.logActivity(3, `Attempt ${retryAttempt + 1} failed for page ${page.pageNumber}: ${error.message}`, 'warning');
+                        
+                        // If it's a timeout, we might want to increase delay for next retry
+                        if (error.message.includes('timeout')) {
+                            this.updateAudioProgress(`⏰ Request timeout - sẽ thử lại với delay dài hơn...`);
+                        }
                     }
-                });
 
-                if (response && response.audioSrc) {
+                    // If failed and still have retries left, wait before retry
+                    if (!audioSrc && retryAttempt < retryCount && !this.audioGenerationPaused) {
+                        let delayTime = retryDelay;
+                        
+                        // Increase delay for timeout errors
+                        if (lastError && lastError.includes('timeout')) {
+                            delayTime = Math.min(retryDelay * 2, 30); // Max 30s delay
+                        }
+                        
+                        this.updateAudioProgress(`⏳ Chờ ${delayTime}s trước khi thử lại trang ${i + 1}...`);
+                        
+                        // Allow cancellation during delay
+                        for (let countdown = delayTime; countdown > 0 && !this.audioGenerationPaused; countdown--) {
+                            this.updateAudioProgress(`⏳ Chờ ${countdown}s trước khi thử lại trang ${i + 1} (Có thể tạm dừng)...`);
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                        }
+                    }
+                    
+                    retryAttempt++;
+                }
+
+                // Add result to array
+                if (audioSrc) {
                     audioResults.push({
                         pageNumber: page.pageNumber,
-                        audioSrc: response.audioSrc
+                        audioSrc: audioSrc,
+                        timestamp: new Date().toISOString(),
+                        text: page.text.substring(0, 50) + '...',
+                        status: 'success',
+                        retryCount: retryAttempt - 1
                     });
                     
                     this.updateAudioProgress(`✅ Hoàn thành trang ${i + 1}/${pages.length}`);
-                    this.logActivity(3, `Audio generated for page ${page.pageNumber}`, 'success');
                 } else {
-                    this.updateAudioProgress(`❌ Lỗi trang ${i + 1}: Không tạo được audio`);
-                    this.logActivity(3, `Failed to generate audio for page ${page.pageNumber}`, 'error');
+                    // Thêm audio lỗi vào kết quả để hiển thị trong bảng
+                    audioResults.push({
+                        pageNumber: page.pageNumber,
+                        audioSrc: null,
+                        timestamp: new Date().toISOString(),
+                        text: page.text.substring(0, 50) + '...',
+                        status: 'error',
+                        error: lastError || 'Không tạo được audio sau nhiều lần thử',
+                        retryCount: retryCount
+                    });
+                    
+                    this.updateAudioProgress(`❌ Lỗi trang ${i + 1}: ${lastError || 'Không tạo được audio'} sau ${retryCount + 1} lần thử`);
+                    this.logActivity(3, `Failed to generate audio for page ${page.pageNumber} after ${retryCount + 1} attempts: ${lastError}`, 'error');
                 }
 
-                // Wait between requests to avoid rate limiting
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                // Wait between pages to avoid rate limiting (only if not the last page)
+                if (i < pages.length - 1 && !this.audioGenerationPaused) {
+                    this.updateAudioProgress(`⏳ Chờ 2s trước khi xử lý trang tiếp theo...`);
+                    for (let countdown = 2; countdown > 0 && !this.audioGenerationPaused; countdown--) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                }
             }
 
             this.audioData = audioResults;
             await this.saveData('audioData', this.audioData);
             
-            this.updateStatus(3, `🎉 Đã tạo xong ${audioResults.length}/${pages.length} audio`, 'success');
-            this.logActivity(3, `Audio generation completed: ${audioResults.length}/${pages.length} successful`, 'success');
+            // Hiển thị bảng kết quả audio
+            this.displayAudioResults(audioResults);
+            
+            const successCount = audioResults.filter(item => item.audioSrc).length;
+            const failedCount = audioResults.length - successCount;
+            
+            let statusMessage = `🎉 Đã tạo xong ${successCount}/${pages.length} audio`;
+            if (failedCount > 0) {
+                statusMessage += ` (${failedCount} lỗi)`;
+            }
+            
+            this.updateStatus(3, statusMessage, successCount === pages.length ? 'success' : 'warning');
+            this.logActivity(3, `Audio generation completed: ${successCount}/${pages.length} successful, ${failedCount} failed`, successCount === pages.length ? 'success' : 'warning');
             
             this.updateAudioProgressBar(100);
             this.currentStep = 4;
@@ -391,6 +569,117 @@ class StorybookTTSSidePanel {
             this.logActivity(3, `Error in audio generation: ${error.message}`, 'error');
         } finally {
             document.getElementById('pauseAudioBtn').disabled = true;
+        }
+    }
+    
+    async retryAudioForPage(pageIndex) {
+        if (!this.storybookData || !this.storybookData.pages || pageIndex < 0 || pageIndex >= this.storybookData.pages.length) {
+            throw new Error('Dữ liệu trang không hợp lệ');
+        }
+        
+        const page = this.storybookData.pages[pageIndex];
+        const styleInstruction = document.getElementById('styleInstruction').value.trim();
+        const retryCount = parseInt(document.getElementById('retryCount').value) || 2;
+        const retryDelay = parseInt(document.getElementById('retryDelay').value) || 5;
+        
+        this.logActivity(3, `Manual retry started for page ${page.pageNumber}`, 'info');
+        
+        let audioSrc = null;
+        let retryAttempt = 0;
+        let lastError = null;
+        
+        // Show progress for this specific retry
+        const originalProgressText = document.getElementById('audioProgressDetail').innerHTML;
+        document.getElementById('audioProgress').classList.remove('hidden');
+        
+        try {
+            // Retry logic
+            while (retryAttempt <= retryCount && !audioSrc) {
+                const attemptText = retryAttempt === 0 ? '' : ` (Thử lại ${retryAttempt}/${retryCount})`;
+                this.updateAudioProgress(`🔄 Đang thử lại trang ${page.pageNumber}${attemptText}...`);
+                
+                try {
+                    const response = await this.sendMessage({
+                        action: "executeScript",
+                        data: {
+                            action: "generateTTS",
+                            text: page.text,
+                            styleInstruction: styleInstruction
+                        }
+                    });
+                    
+                    if (response && response.audioSrc) {
+                        audioSrc = response.audioSrc;
+                        this.logActivity(3, `Manual retry successful for page ${page.pageNumber} after ${retryAttempt} attempts`, 'success');
+                    } else {
+                        lastError = 'Không nhận được audio từ server';
+                    }
+                } catch (error) {
+                    lastError = error.message;
+                    this.logActivity(3, `Manual retry attempt ${retryAttempt + 1} failed for page ${page.pageNumber}: ${error.message}`, 'warning');
+                }
+                
+                if (!audioSrc && retryAttempt < retryCount) {
+                    this.updateAudioProgress(`⏳ Chờ ${retryDelay}s trước khi thử lại...`);
+                    await new Promise(resolve => setTimeout(resolve, retryDelay * 1000));
+                }
+                
+                retryAttempt++;
+            }
+            
+            // Update audio data and UI
+            if (audioSrc) {
+                // Update existing audio data
+                if (this.audioData && this.audioData.length > pageIndex) {
+                    this.audioData[pageIndex] = {
+                        pageNumber: page.pageNumber,
+                        audioSrc: audioSrc,
+                        timestamp: new Date().toISOString(),
+                        text: page.text.substring(0, 50) + '...',
+                        status: 'success',
+                        retryCount: retryAttempt - 1
+                    };
+                } else {
+                    // Initialize audio data if it doesn't exist
+                    if (!this.audioData) this.audioData = [];
+                    this.audioData[pageIndex] = {
+                        pageNumber: page.pageNumber,
+                        audioSrc: audioSrc,
+                        timestamp: new Date().toISOString(),
+                        text: page.text.substring(0, 50) + '...',
+                        status: 'success',
+                        retryCount: retryAttempt - 1
+                    };
+                }
+                
+                // Save updated data
+                await this.saveData('audioData', this.audioData);
+                
+                // Update display
+                this.displayAudioResults(this.audioData);
+                
+                this.updateAudioProgress(`✅ Thành công! Trang ${page.pageNumber} đã được tạo lại audio`);
+                setTimeout(() => {
+                    document.getElementById('audioProgress').classList.add('hidden');
+                }, 3000);
+                
+            } else {
+                this.updateAudioProgress(`❌ Thử lại thất bại cho trang ${page.pageNumber}: ${lastError}`);
+                this.logActivity(3, `Manual retry failed for page ${page.pageNumber} after ${retryCount + 1} attempts: ${lastError}`, 'error');
+                
+                setTimeout(() => {
+                    document.getElementById('audioProgressDetail').innerHTML = originalProgressText;
+                    if (originalProgressText.trim() === '') {
+                        document.getElementById('audioProgress').classList.add('hidden');
+                    }
+                }, 5000);
+                
+                throw new Error(`Không thể tạo audio sau ${retryCount + 1} lần thử: ${lastError}`);
+            }
+            
+        } catch (error) {
+            this.logActivity(3, `Manual retry error for page ${page.pageNumber}: ${error.message}`, 'error');
+            throw error;
         }
     }
 
@@ -856,6 +1145,8 @@ class StorybookTTSSidePanel {
             // Load stored data
             const promptInput = await this.loadData('promptInput');
             const styleInstruction = await this.loadData('styleInstruction');
+            const retryCount = await this.loadData('retryCount');
+            const retryDelay = await this.loadData('retryDelay');
             const currentStep = await this.loadData('currentStep');
             this.storybookData = await this.loadData('storybookData');
             this.audioData = await this.loadData('audioData');
@@ -866,6 +1157,12 @@ class StorybookTTSSidePanel {
             }
             if (styleInstruction) {
                 document.getElementById('styleInstruction').value = styleInstruction;
+            }
+            if (retryCount !== null && retryCount !== undefined) {
+                document.getElementById('retryCount').value = retryCount;
+            }
+            if (retryDelay !== null && retryDelay !== undefined) {
+                document.getElementById('retryDelay').value = retryDelay;
             }
 
             // Determine current step
@@ -887,6 +1184,10 @@ class StorybookTTSSidePanel {
             // Display loaded data
             if (this.storybookData) {
                 this.displayStorybookData(this.storybookData);
+            }
+            
+            if (this.audioData && this.audioData.length > 0) {
+                this.displayAudioResults(this.audioData);
             }
 
         } catch (error) {
@@ -960,6 +1261,147 @@ function clearLogs() {
         window.storybookExtension.clearAllLogs();
     } else {
         console.error('Extension not initialized or clearAllLogs method not available');
+    }
+}
+
+// Global functions for audio operations
+function downloadAudio(audioSrc, filename) {
+    console.log('Downloading audio:', audioSrc, filename);
+    try {
+        const link = document.createElement('a');
+        link.href = audioSrc;
+        link.download = filename || 'audio.wav';
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        if (window.storybookExtension) {
+            window.storybookExtension.logActivity(3, `Downloaded audio: ${filename}`, 'info');
+        }
+    } catch (error) {
+        console.error('Error downloading audio:', error);
+        alert('Lỗi tải audio: ' + error.message);
+    }
+}
+
+function playAudio(audioSrc) {
+    console.log('Playing audio:', audioSrc);
+    try {
+        // Tạo audio element tạm thời để phát
+        const audio = new Audio(audioSrc);
+        audio.play().then(() => {
+            console.log('Audio playing successfully');
+            if (window.storybookExtension) {
+                window.storybookExtension.logActivity(3, 'Audio playback started', 'info');
+            }
+        }).catch(error => {
+            console.error('Error playing audio:', error);
+            alert('Lỗi phát audio: ' + error.message);
+        });
+    } catch (error) {
+        console.error('Error creating audio element:', error);
+        alert('Lỗi tạo audio player: ' + error.message);
+    }
+}
+
+function playAudioFullscreen(audioSrc, title) {
+    console.log('Playing audio fullscreen:', audioSrc, title);
+    try {
+        // Tạo modal fullscreen cho audio
+        const modal = document.createElement('div');
+        modal.className = 'audio-fullscreen-modal';
+        modal.innerHTML = `
+            <div class="audio-fullscreen-content">
+                <button class="close-modal" onclick="closeAudioModal()">×</button>
+                <h3>🎵 ${title || 'Audio Player'}</h3>
+                <audio controls autoplay style="width: 100%; height: 50px;">
+                    <source src="${audioSrc}" type="audio/wav">
+                    <source src="${audioSrc}" type="audio/mpeg">
+                    Trình duyệt không hỗ trợ phát audio.
+                </audio>
+                <div style="margin-top: 15px;">
+                    <button class="btn-secondary" onclick="downloadAudio('${audioSrc}', '${title || 'audio'}.wav')">⬇️ Tải xuống</button>
+                    <button class="btn-danger" onclick="closeAudioModal()">❌ Đóng</button>
+                </div>
+            </div>
+        `;
+        
+        // Thêm modal vào body
+        document.body.appendChild(modal);
+        window.currentAudioModal = modal;
+        
+        // Đóng modal khi click bên ngoài
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeAudioModal();
+            }
+        });
+        
+        // Đóng modal bằng phím ESC
+        const escHandler = (e) => {
+            if (e.key === 'Escape') {
+                closeAudioModal();
+                document.removeEventListener('keydown', escHandler);
+            }
+        };
+        document.addEventListener('keydown', escHandler);
+        
+        // Log activity
+        if (window.storybookExtension) {
+            window.storybookExtension.logActivity(3, `Audio fullscreen opened: ${title}`, 'info');
+        }
+        
+    } catch (error) {
+        console.error('Error creating fullscreen audio player:', error);
+        alert('Lỗi tạo audio player toàn màn hình: ' + error.message);
+    }
+}
+
+function closeAudioModal() {
+    if (window.currentAudioModal) {
+        // Dừng audio trước khi đóng
+        const audio = window.currentAudioModal.querySelector('audio');
+        if (audio) {
+            audio.pause();
+            audio.currentTime = 0;
+        }
+        
+        document.body.removeChild(window.currentAudioModal);
+        window.currentAudioModal = null;
+        
+        if (window.storybookExtension) {
+            window.storybookExtension.logActivity(3, 'Audio fullscreen closed', 'info');
+        }
+    }
+}
+
+function retryAudio(audioIndex) {
+    console.log('Retrying audio generation for index:', audioIndex);
+    if (window.storybookExtension && window.storybookExtension.storybookData) {
+        const extension = window.storybookExtension;
+        const pages = extension.storybookData.pages;
+        
+        if (audioIndex >= 0 && audioIndex < pages.length) {
+            // Confirm retry
+            if (confirm(`Bạn có muốn thử lại tạo audio cho trang ${audioIndex + 1}?`)) {
+                // Call retry for single page
+                extension.retryAudioForPage(audioIndex).then(() => {
+                    console.log(`Retry completed for page ${audioIndex + 1}`);
+                }).catch(error => {
+                    console.error(`Retry failed for page ${audioIndex + 1}:`, error);
+                    alert(`Lỗi khi thử lại trang ${audioIndex + 1}: ${error.message}`);
+                });
+            }
+        } else {
+            alert('Chỉ số trang không hợp lệ');
+        }
+        
+        if (window.storybookExtension) {
+            window.storybookExtension.logActivity(3, `Manual retry requested for page ${audioIndex + 1}`, 'info');
+        }
+    } else {
+        alert('Không thể thử lại - extension chưa được khởi tạo hoặc không có dữ liệu storybook');
     }
 }
 
