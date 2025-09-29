@@ -301,6 +301,82 @@ class StorybookTTSSidePanel {
         document.getElementById('rawStorybookData').value = JSON.stringify(data, null, 2);
     }
     
+    // Add single audio result to table immediately when generated
+    addAudioResultToTable(audioItem, index) {
+        // Show the audio results section if not already visible
+        document.getElementById('audioResults').classList.remove('hidden');
+        
+        const tbody = document.getElementById('audioTableBody');
+        const row = document.createElement('tr');
+        const isSuccess = audioItem.audioSrc && audioItem.audioSrc !== '';
+        const statusClass = isSuccess ? 'status-success' : 'status-error';
+        const statusIcon = isSuccess ? '✓' : '✗';
+        const statusText = isSuccess ? 'Hoàn thành' : 'Lỗi';
+        const retryInfo = audioItem.retryCount > 0 ? ` (${audioItem.retryCount} retry)` : '';
+        
+        row.innerHTML = `
+            <td><strong>Trang ${audioItem.pageNumber || index + 1}</strong></td>
+            <td><span class="${statusClass}">${statusIcon} ${statusText}${retryInfo}</span></td>
+            <td>${isSuccess ? 
+                `<audio controls style="width: 120px; height: 30px;">
+                    <source src="${audioItem.audioSrc}" type="audio/wav">
+                    <a href="${audioItem.audioSrc}" target="_blank" class="audio-link">🔊 Nghe</a>
+                </audio>` : 
+                '<span style="color: #999;">Không có</span>'
+            }</td>
+            <td style="font-size: 10px;">${audioItem.timestamp ? new Date(audioItem.timestamp).toLocaleString() : new Date().toLocaleString()}</td>
+            <td>
+                ${isSuccess ? 
+                    `<button class="btn-secondary" onclick="downloadAudio('${audioItem.audioSrc}', 'page-${audioItem.pageNumber}.wav')" title="Tải xuống">⬇️</button>` + 
+                    `<button class="btn-secondary" onclick="playAudioFullscreen('${audioItem.audioSrc}', 'Trang ${audioItem.pageNumber}')" title="Phát toàn màn hình">🔊</button>` : 
+                    `<button class="btn-danger" onclick="retryAudio(${index})" title="Thử lại">🔄</button>`
+                }
+            </td>
+        `;
+        tbody.appendChild(row);
+        
+        // Update summary immediately
+        this.updateAudioSummary();
+    }
+    
+    // Update audio summary based on current table data
+    updateAudioSummary() {
+        const tbody = document.getElementById('audioTableBody');
+        const totalRows = tbody.rows.length;
+        
+        if (totalRows === 0) {
+            document.getElementById('audioSummary').innerHTML = 'Chưa có audio nào được tải';
+            document.getElementById('audioSummary').className = 'status info audio-summary';
+            return;
+        }
+        
+        // Count successful audio files
+        let successCount = 0;
+        for (let i = 0; i < totalRows; i++) {
+            const statusCell = tbody.rows[i].cells[1];
+            if (statusCell && statusCell.querySelector('.status-success')) {
+                successCount++;
+            }
+        }
+        
+        const summaryEl = document.getElementById('audioSummary');
+        const successRate = Math.round((successCount / totalRows) * 100);
+        summaryEl.innerHTML = `
+            <strong>📊 Tổng kết:</strong> ${successCount}/${totalRows} file hoàn thành (${successRate}%)<br>
+            <strong>⏰ Cập nhật:</strong> ${new Date().toLocaleString()}<br>
+            <strong>📁 Tổng dung lượng:</strong> Ước tính ~${(successCount * 0.5).toFixed(1)} MB
+        `;
+        
+        // Set appropriate status color
+        if (successRate === 100) {
+            summaryEl.className = 'status success audio-summary';
+        } else if (successRate >= 50) {
+            summaryEl.className = 'status warning audio-summary';
+        } else {
+            summaryEl.className = 'status error audio-summary';
+        }
+    }
+
     displayAudioResults(audioData) {
         if (!audioData || audioData.length === 0) {
             console.warn('No audio data to display');
@@ -504,29 +580,28 @@ class StorybookTTSSidePanel {
                 }
 
                 // Add result to array
+                const audioItem = {
+                    pageNumber: page.pageNumber,
+                    audioSrc: audioSrc,
+                    timestamp: new Date().toISOString(),
+                    text: page.text.substring(0, 50) + '...',
+                    status: audioSrc ? 'success' : 'error',
+                    retryCount: retryAttempt - 1
+                };
+                
+                if (!audioSrc) {
+                    audioItem.error = lastError || 'Không tạo được audio sau nhiều lần thử';
+                    audioItem.retryCount = retryCount;
+                }
+                
+                audioResults.push(audioItem);
+                
+                // *** ADD TO TABLE IMMEDIATELY *** 
+                this.addAudioResultToTable(audioItem, i);
+                
                 if (audioSrc) {
-                    audioResults.push({
-                        pageNumber: page.pageNumber,
-                        audioSrc: audioSrc,
-                        timestamp: new Date().toISOString(),
-                        text: page.text.substring(0, 50) + '...',
-                        status: 'success',
-                        retryCount: retryAttempt - 1
-                    });
-                    
                     this.updateAudioProgress(`✅ Hoàn thành trang ${i + 1}/${pages.length}`);
                 } else {
-                    // Thêm audio lỗi vào kết quả để hiển thị trong bảng
-                    audioResults.push({
-                        pageNumber: page.pageNumber,
-                        audioSrc: null,
-                        timestamp: new Date().toISOString(),
-                        text: page.text.substring(0, 50) + '...',
-                        status: 'error',
-                        error: lastError || 'Không tạo được audio sau nhiều lần thử',
-                        retryCount: retryCount
-                    });
-                    
                     this.updateAudioProgress(`❌ Lỗi trang ${i + 1}: ${lastError || 'Không tạo được audio'} sau ${retryCount + 1} lần thử`);
                     this.logActivity(3, `Failed to generate audio for page ${page.pageNumber} after ${retryCount + 1} attempts: ${lastError}`, 'error');
                 }
@@ -543,8 +618,8 @@ class StorybookTTSSidePanel {
             this.audioData = audioResults;
             await this.saveData('audioData', this.audioData);
             
-            // Hiển thị bảng kết quả audio
-            this.displayAudioResults(audioResults);
+            // Final summary update (results already shown in real-time)
+            this.updateAudioSummary();
             
             const successCount = audioResults.filter(item => item.audioSrc).length;
             const failedCount = audioResults.length - successCount;
