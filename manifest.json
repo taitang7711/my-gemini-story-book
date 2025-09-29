@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "Gemini Storybook TTS Extension",
+  "version": "1.0.0",
+  "description": "Extension to extract storybook content from Gemini and generate TTS audio",
+  
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs",
+    "sidePanel",
+    "downloads"
+  ],
+  
+  "host_permissions": [
+    "https://gemini.google.com/*",
+    "https://aistudio.google.com/*"
+  ],
+  
+  "background": {
+    "service_worker": "background.js"
+  },
+  
+  "content_scripts": [
+    {
+      "matches": ["https://gemini.google.com/gem/storybook*"],
+      "js": ["content-gemini.js"]
+    },
+    {
+      "matches": ["https://aistudio.google.com/generate-speech*"],
+      "js": ["content-aistudio.js"]
+    }
+  ],
+  
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  
+  "action": {
+    "default_title": "Open Gemini Storybook TTS Side Panel"
+  }
+}

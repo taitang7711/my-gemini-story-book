@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Storybook TTS Side Panel</title>
+    <style>
+        body {
+            width: 100%;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            overflow-x: hidden;
+        }
+        
+        .container {
+            padding: 16px;
+            max-width: 100%;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 12px;
+            background: linear-gradient(135deg, #4285f4, #34a853);
+            color: white;
+            border-radius: 8px;
+        }
+        
+        .header h2 {
+            margin: 0;
+            font-size: 18px;
+        }
+        
+        .step {
+            background: white;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-left: 4px solid #e0e0e0;
+            transition: all 0.3s ease;
+        }
+        
+        .step-title {
+            font-weight: bold;
+            margin-bottom: 12px;
+            color: #333;
+            font-size: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .step-number {
+            background: #4285f4;
+            color: white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .step.active {
+            border-left-color: #4285f4;
+            box-shadow: 0 4px 12px rgba(66, 133, 244, 0.2);
+        }
+        
+        .step.completed {
+            border-left-color: #34a853;
+            box-shadow: 0 4px 12px rgba(52, 168, 83, 0.2);
+        }
+        
+        .step.completed .step-number {
+            background: #34a853;
+        }
+        
+        .step.active .step-number {
+            background: #4285f4;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(66, 133, 244, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(66, 133, 244, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(66, 133, 244, 0); }
+        }
+        
+        textarea {
+            width: 100%;
+            min-height: 80px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 12px;
+            font-size: 13px;
+            resize: vertical;
+            box-sizing: border-box;
+            font-family: inherit;
+        }
+        
+        .textarea-large {
+            min-height: 120px;
+        }
+        
+        .textarea-readonly {
+            background: #f5f5f5;
+            color: #666;
+        }
+        
+        button {
+            background: #4285f4;
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 6px 6px 0 0;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        button:hover {
+            background: #3367d6;
+            transform: translateY(-1px);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+        }
+        
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        
+        .btn-success {
+            background: #28a745;
+        }
+        
+        .btn-success:hover {
+            background: #218838;
+        }
+        
+        .status {
+            padding: 12px;
+            margin: 12px 0;
+            border-radius: 6px;
+            font-size: 13px;
+            border-left: 4px solid;
+        }
+        
+        .status.info {
+            background: #e3f2fd;
+            color: #1976d2;
+            border-left-color: #2196f3;
+        }
+        
+        .status.success {
+            background: #e8f5e8;
+            color: #2e7d32;
+            border-left-color: #4caf50;
+        }
+        
+        .status.error {
+            background: #ffebee;
+            color: #c62828;
+            border-left-color: #f44336;
+        }
+        
+        .status.warning {
+            background: #fff3e0;
+            color: #f57f17;
+            border-left-color: #ff9800;
+        }
+        
+        .data-table {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            margin: 12px 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        
+        th, td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            margin: 12px 0;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4285f4, #34a853);
+            border-radius: 3px;
+            transition: width 0.5s ease;
+            position: relative;
+        }
+        
+        .progress-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background-image: linear-gradient(
+                -45deg,
+                rgba(255, 255, 255, .2) 25%,
+                transparent 25%,
+                transparent 50%,
+                rgba(255, 255, 255, .2) 50%,
+                rgba(255, 255, 255, .2) 75%,
+                transparent 75%,
+                transparent
+            );
+            background-size: 50px 50px;
+            animation: move 2s linear infinite;
+        }
+        
+        @keyframes move {
+            0% { background-position: 0 0; }
+            100% { background-position: 50px 50px; }
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .collapsible {
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .collapsible::after {
+            content: ' ▼';
+            font-size: 12px;
+        }
+        
+        .collapsible.collapsed::after {
+            content: ' ▶';
+        }
+        
+        .logs-container {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #f8f9fa;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+        }
+        
+        .log-entry {
+            padding: 6px 12px;
+            border-bottom: 1px solid #eee;
+            white-space: pre-wrap;
+        }
+        
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+        
+        .log-entry.info { color: #1976d2; }
+        .log-entry.success { color: #2e7d32; }
+        .log-entry.error { color: #c62828; }
+        .log-entry.warning { color: #f57f17; }
+        
+        .button-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+        
+        .section-title {
+            font-weight: 600;
+            margin: 16px 0 8px 0;
+            color: #333;
+            font-size: 14px;
+        }
+        
+        .audio-progress {
+            background: #e3f2fd;
+            border: 1px solid #2196f3;
+            border-radius: 6px;
+            padding: 12px;
+            margin: 12px 0;
+        }
+        
+        .audio-progress-item {
+            padding: 4px 0;
+            font-size: 12px;
+        }
+        
+        .spinner {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #4285f4;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>🎙️ Gemini Storybook TTS</h2>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <div class="step">
+            <div class="step-title">
+                📋 Activity Logs
+            </div>
+            <div id="logsSection">
+                <div class="logs-container" id="logsContainer">
+                    <div class="log-entry info">Extension loaded - Ready to start</div>
+                </div>
+                <div class="button-group">
+                    <button class="btn-secondary" onclick="refreshLogs()">🔄 Refresh</button>
+                    <button class="btn-danger" onclick="clearLogs()">🗑️ Clear Logs</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bước 1: Truy cập Gemini Storybook -->
+        <div class="step active" id="step1">
+            <div class="step-title">
+                <span><span class="step-number">1</span> Tạo Storybook trên Gemini</span>
+                <button class="btn-danger" onclick="clearStepData(1)" title="Xóa dữ liệu bước 1">🗑️</button>
+            </div>
+            <div class="status info" id="status1">Nhập prompt để tạo storybook</div>
+            <div class="section-title">Prompt Input:</div>
+            <textarea id="promptInput" class="textarea-large" placeholder="Nhập prompt để tạo storybook (ví dụ: Tạo một câu chuyện về một chú mèo nhỏ đi phiêu lưu...)"></textarea>
+            <div class="button-group">
+                <button id="openGeminiBtn">🌐 Mở Gemini Storybook</button>
+                <button id="sendPromptBtn" disabled>📤 Gửi Prompt</button>
+            </div>
+        </div>
+
+        <!-- Bước 2: Trích xuất dữ liệu -->
+        <div class="step" id="step2">
+            <div class="step-title">
+                <span><span class="step-number">2</span> Trích xuất nội dung Storybook</span>
+                <button class="btn-danger" onclick="clearStepData(2)" title="Xóa dữ liệu bước 2">🗑️</button>
+            </div>
+            <div class="status info" id="status2">Chưa bắt đầu</div>
+            <div class="button-group">
+                <button id="extractDataBtn" disabled>📥 Trích xuất dữ liệu</button>
+                <button id="checkDataBtn" disabled>🔍 Kiểm tra dữ liệu</button>
+                <button id="autoCheckBtn" disabled>⏰ Auto Check (30s)</button>
+            </div>
+            <div class="hidden" id="storybookData">
+                <div class="section-title collapsible" onclick="toggleSection('dataTableSection')">
+                    📊 Dữ liệu trích xuất
+                </div>
+                <div id="dataTableSection">
+                    <div class="data-table">
+                        <table id="storybookTable">
+                            <thead>
+                                <tr>
+                                    <th>Trang</th>
+                                    <th>Text</th>
+                                    <th>Hình ảnh</th>
+                                </tr>
+                            </thead>
+                            <tbody id="storybookTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="section-title">Raw JSON Data:</div>
+                    <textarea id="rawStorybookData" class="textarea-readonly" placeholder="Dữ liệu JSON thô sẽ hiển thị ở đây..." readonly></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bước 3: Tạo Audio -->
+        <div class="step" id="step3">
+            <div class="step-title">
+                <span><span class="step-number">3</span> Tạo Audio TTS</span>
+                <button class="btn-danger" onclick="clearStepData(3)" title="Xóa dữ liệu bước 3">🗑️</button>
+            </div>
+            <div class="status info" id="status3">Chưa bắt đầu</div>
+            <div class="section-title">Style Instruction:</div>
+            <textarea id="styleInstruction" placeholder="Describe the voice style (optional)">Read this like a children's story with a gentle, warm voice</textarea>
+            <div class="button-group">
+                <button id="openAIStudioBtn" disabled>🌐 Mở AI Studio</button>
+                <button id="generateAudioBtn" disabled>🎵 Tạo Audio</button>
+                <button id="pauseAudioBtn" class="btn-secondary" disabled>⏸️ Tạm dừng</button>
+            </div>
+            <div class="hidden" id="audioProgress">
+                <div class="audio-progress">
+                    <div class="status info" id="audioStatus">Đang xử lý...</div>
+                    <div id="audioProgressDetail"></div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="audioProgressBar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bước 4: Xuất kết quả -->
+        <div class="step" id="step4">
+            <div class="step-title">
+                <span><span class="step-number">4</span> Xuất kết quả</span>
+                <button class="btn-danger" onclick="clearStepData(4)" title="Xóa dữ liệu bước 4">🗑️</button>
+            </div>
+            <div class="status info" id="status4">Chưa bắt đầu</div>
+            <div class="button-group">
+                <button id="exportDataBtn" class="btn-success" disabled>💾 Xuất JSON</button>
+                <button id="exportTxtBtn" class="btn-secondary" disabled>📄 Xuất TXT</button>
+                <button id="clearAllDataBtn" class="btn-danger">🗑️ Xóa tất cả dữ liệu</button>
+            </div>
+            <div class="hidden" id="finalData">
+                <div class="section-title collapsible" onclick="toggleSection('finalDataSection')">
+                    🎯 Kết quả cuối cùng
+                </div>
+                <div id="finalDataSection">
+                    <textarea id="finalJsonData" class="textarea-readonly textarea-large" readonly placeholder="Dữ liệu JSON cuối cùng với audio sẽ hiển thị ở đây..."></textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- Logs Section -->
+        
+    </div>
+
+    <script src="sidepanel.js"></script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+# Note: You need actual PNG icon files for the extension to work properly
+# Create these icon files:
+# - icon16.png (16x16 pixels)  
+# - icon48.png (48x48 pixels)
+# - icon128.png (128x128 pixels)
+
+# You can use the provided icon.svg as a reference design:
+# - Blue background (#4285f4)
+# - White text lines
+# - Green microphone/audio indicator (#34a853)
+
+# Tools to create PNG icons from SVG:
+# - Online converters (svg2png.com, etc.)
+# - Design tools (Figma, Canva, etc.)  
+# - Code editors with SVG export plugins
+
+# The icons should represent:
+# - Document/text (white lines)
+# - Audio/microphone (green circle)
+# - AI/Technology (blue background)
