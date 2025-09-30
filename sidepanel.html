@@ -135,7 +135,7 @@
             transform: translateY(0);
         }
         
-        button:disabled {
+        button:d {
             background: #ccc;
             cursor: not-allowed;
             transform: none;
@@ -551,7 +551,7 @@
             <textarea id="promptInput" class="textarea-large" placeholder="Nhập prompt để tạo storybook (ví dụ: Tạo một câu chuyện về một chú mèo nhỏ đi phiêu lưu...)"></textarea>
             <div class="button-group">
                 <button id="openGeminiBtn">🌐 Mở Gemini Storybook</button>
-                <button id="sendPromptBtn" disabled>📤 Gửi Prompt</button>
+                <button id="sendPromptBtn" d>📤 Gửi Prompt</button>
             </div>
         </div>
 
@@ -563,9 +563,9 @@
             </div>
             <div class="status info" id="status2">Chưa bắt đầu</div>
             <div class="button-group">
-                <button id="extractDataBtn" disabled>📥 Trích xuất dữ liệu</button>
-                <button id="checkDataBtn" disabled>🔍 Kiểm tra dữ liệu</button>
-                <button id="autoCheckBtn" disabled>⏰ Auto Check (30s)</button>
+                <button id="extractDataBtn" d>📥 Trích xuất dữ liệu</button>
+                <button id="checkDataBtn" d>🔍 Kiểm tra dữ liệu</button>
+                <button id="autoCheckBtn" d>⏰ Auto Check (30s)</button>
             </div>
             <div class="hidden" id="storybookData">
                 <div class="section-title collapsible" onclick="toggleSection('dataTableSection')">
@@ -616,9 +616,9 @@
                 </div>
             </div>
             <div class="button-group">
-                <button id="openAIStudioBtn" disabled>🌐 Mở AI Studio</button>
-                <button id="generateAudioBtn" disabled>🎵 Tạo Audio</button>
-                <button id="pauseAudioBtn" class="btn-secondary" disabled>⏸️ Tạm dừng</button>
+                <button id="openAIStudioBtn" d>🌐 Mở AI Studio</button>
+                <button id="generateAudioBtn" d>🎵 Tạo Audio</button>
+                <button id="pauseAudioBtn" class="btn-secondary" d>⏸️ Tạm dừng</button>
             </div>
             <div class="hidden" id="audioProgress">
                 <div class="audio-progress">
@@ -665,8 +665,8 @@
             </div>
             <div class="status info" id="status4">Chưa bắt đầu</div>
             <div class="button-group">
-                <button id="exportDataBtn" class="btn-success" disabled>💾 Xuất JSON</button>
-                <button id="exportTxtBtn" class="btn-secondary" disabled>📄 Xuất TXT</button>
+                <button id="exportDataBtn" class="btn-success">💾 Xuất JSON</button>
+                <button id="exportTxtBtn" class="btn-secondary">📄 Xuất TXT</button>
                 <button id="clearAllDataBtn" class="btn-danger">🗑️ Xóa tất cả dữ liệu</button>
             </div>
             <div class="hidden" id="finalData">
